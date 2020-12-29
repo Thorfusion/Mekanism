@@ -110,6 +110,7 @@ def setupDataGenSourceSet(SourceSet datagenSourceSet, SourceSet baseSourceSet, S
     }
 }
 
+<<<<<<< Updated upstream
 configurations {
     //Make sure all our sub source set stuff extends the proper base methods so that
     // they can see all the dependencies we have in dependencies including forge
@@ -133,6 +134,14 @@ configurations {
     for (def runtimeOnlyExtender : runtimeOnlyExtenders) {
         runtimeOnlyExtender.extendsFrom(runtimeOnly)
     }
+=======
+dependencies {
+    compile "codechicken:CodeChickenLib:${config.minecraft_version}-${config.CCLIB_version}:dev"
+    compile "codechicken:ForgeMultipart:${config.minecraft_version}-${config.FMP_version}:dev"
+    compile "codechicken:NotEnoughItems:${config.minecraft_version}-${config.NEI_version}:dev"
+    compile "codechicken:CodeChickenCore:${config.minecraft_version}-${config.CCC_version}:dev"
+    compile fileTree(dir: 'libs', include: '*.jar')
+>>>>>>> Stashed changes
 }
 
 def version_properties = ["version"       : mod_version, "mc_version": minecraft_version_range, "forge_version": forge_version_range,
