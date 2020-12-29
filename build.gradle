@@ -1,801 +1,171 @@
-import groovy.json.JsonOutput
-import groovy.json.JsonSlurper
-import mekanism.tasks.MergeJars
+defaultTasks 'fullBuild'
 
 buildscript {
     repositories {
-        jcenter()
-        maven {
-            name "forge"
-            url "https://files.minecraftforge.net/maven"
-        }
+    maven { url = "https://repo1.maven.org/maven2/" }
+    maven {
+      name = "forge"
+        url = "https://files.minecraftforge.net/maven"
     }
-    dependencies {
-        classpath group: 'net.minecraftforge.gradle', name: 'ForgeGradle', version: '3.+', changing: true
+    maven {
+      name = "sonatype"
+        url = "https://oss.sonatype.org/content/repositories/snapshots/"
+    }
+  }
+  dependencies {
+    classpath 'net.minecraftforge.gradle:ForgeGradle:1.2-SNAPSHOT'
+  }
+}
+
+repositories {
+    maven {
+        name 'CB Maven FS'
+        url "http://chickenbones.net/maven/"
+    }
+    maven {
+        name 'ForgeFS'
+        url 'http://files.minecraftforge.net/maven'
+     }
+    flatDir {
+        dirs 'libs'
     }
 }
 
-plugins {
-    id 'org.ajoberstar.grgit' version '4.1.0'
-    id "com.matthewprenger.cursegradle" version '1.4.0'
-    id 'java'
-    id 'idea'
-    id 'maven'
-    id 'maven-publish'
-}
-
-defaultTasks 'fullBuild'
+apply plugin: 'idea'
 
 idea {
     module {
         // For some reason this is necessary for IDEA 2014 workspaces to recognize assets
         inheritOutputDirs = true
-        //Exclude directories from being managed
-        for (String excludeDirName in ["run", "out", "logs", "gradle"]) {
-            File excludeDir = new File(projectDir, excludeDirName)
-            excludeDirs.add(excludeDir)
-        }
     }
 }
 
-apply plugin: 'net.minecraftforge.gradle'
+apply plugin: 'forge'
 
-sourceSets {
-    api {
-        java {
-            srcDir 'src/api/java'
-        }
-    }
-    main {
-        java {
-            srcDir 'src/main/java'
-        }
-        resources {
-            include '**/**'
-            // copy everything else, but blender files.
-            exclude '**/*.blend'
-            //Add the generated main module resources
-            srcDirs += 'src/datagen/generated/mekanism'
-            //But exclude the cache of the generated data from what gets built
-            exclude '.cache'
-        }
-        compileClasspath += api.output
-        runtimeClasspath += api.output
-    }
-    additions { setupSourceSet(additions, 'additions') }
-    generators { setupSourceSet(generators, 'generators') }
-    defense { setupSourceSet(defense, 'defense') }
-    tools { setupSourceSet(tools, 'tools') }
-    test {
-        compileClasspath += api.output + main.output + additions.output + generators.output + defense.output + tools.output
-        runtimeClasspath += api.output + main.output + additions.output + generators.output + defense.output + tools.output
-    }
-    //Data gen modules for the different modules
-    datagenmain { setupDataGenSourceSet(datagenmain, null, 'main') }
-    datagenadditions { setupDataGenSourceSet(datagenadditions, additions, 'additions') }
-    datagengenerators { setupDataGenSourceSet(datagengenerators, generators, 'generators') }
-    datagendefense { setupDataGenSourceSet(datagendefense, defense, 'defense') }
-    datagentools { setupDataGenSourceSet(datagentools, tools, 'tools') }
+// Define properties file
+ext.configFile = file "build.properties"
+
+configFile.withReader {
+    // Load config. It shall from now be referenced as simply config or project.config
+    def prop = new Properties()
+    prop.load(it)
+    project.ext.config = new ConfigSlurper().parse prop
 }
 
-//This method sets up an additional sourceSet in src/$name and adds a reference to the corresponding
-// data gen's resource directory excluding the cache. It also adds the api and main mekanism module
-// to the dependencies of the source set we are setting up
-def setupSourceSet(SourceSet sourceSet, String name) {
-    sourceSet.java {
-        srcDir 'src/' + name + '/java'
-    }
-    sourceSet.resources {
-        //Add the generated module resources
-        srcDirs += 'src/datagen/generated/mekanism' + name
-        //But exclude the cache of the generated data from what gets built
-        exclude '.cache'
-    }
-    sourceSet.compileClasspath += sourceSets.api.output
-    sourceSet.compileClasspath += sourceSets.main.output
-}
-
-//This method sets up a source set in datagen/$name and adds the api, main mekanism module and an optional
-// base module to the dependencies of the data generators source set that we are setting up
-def setupDataGenSourceSet(SourceSet datagenSourceSet, SourceSet baseSourceSet, String name) {
-    datagenSourceSet.java.srcDirs = ['src/datagen/' + name + '/java']
-    datagenSourceSet.resources.srcDirs = ['src/datagen/' + name + '/resources']
-    datagenSourceSet.compileClasspath += project.sourceSets.api.output
-    datagenSourceSet.compileClasspath += project.sourceSets.main.output
-    if (baseSourceSet != null) {
-        //Only case it is null is when we are doing datagenmain so other cases also add access to the stuff
-        // in datagenmain so we can add helper classes
-        datagenSourceSet.compileClasspath += project.sourceSets.datagenmain.output
-        datagenSourceSet.compileClasspath += baseSourceSet.output
-    }
-}
-
-<<<<<<< Updated upstream
-configurations {
-    //Make sure all our sub source set stuff extends the proper base methods so that
-    // they can see all the dependencies we have in dependencies including forge
-    def compileExtenders = [apiCompile, additionsCompile, generatorsCompile, defenseCompile, toolsCompile, testCompile,
-                            datagenmainCompile, datagenadditionsCompile, datagengeneratorsCompile, datagendefenseCompile, datagentoolsCompile]
-    def implementationExtenders = [apiImplementation, additionsImplementation, generatorsImplementation, defenseImplementation, toolsImplementation, testImplementation,
-                                   datagenmainImplementation, datagenadditionsImplementation, datagengeneratorsImplementation, datagendefenseImplementation, datagentoolsImplementation]
-    def compileOnlyExtenders = [apiCompileOnly, additionsCompileOnly, generatorsCompileOnly, defenseCompileOnly, toolsCompileOnly, testCompileOnly,
-                                datagenmainCompileOnly, datagenadditionsCompileOnly, datagengeneratorsCompileOnly, datagendefenseCompileOnly, datagentoolsCompileOnly]
-    def runtimeOnlyExtenders = [apiRuntimeOnly, additionsRuntimeOnly, generatorsRuntimeOnly, defenseRuntimeOnly, toolsRuntimeOnly,
-                                datagenmainRuntimeOnly, datagenadditionsRuntimeOnly, datagengeneratorsRuntimeOnly, datagendefenseRuntimeOnly, datagentoolsRuntimeOnly]
-    for (def compileExtender : compileExtenders) {
-        compileExtender.extendsFrom(compile)
-    }
-    for (def implementationExtender : implementationExtenders) {
-        implementationExtender.extendsFrom(implementation)
-    }
-    for (def compileOnlyExtender : compileOnlyExtenders) {
-        compileOnlyExtender.extendsFrom(compileOnly)
-    }
-    for (def runtimeOnlyExtender : runtimeOnlyExtenders) {
-        runtimeOnlyExtender.extendsFrom(runtimeOnly)
-    }
-=======
 dependencies {
     compile "codechicken:CodeChickenLib:${config.minecraft_version}-${config.CCLIB_version}:dev"
     compile "codechicken:ForgeMultipart:${config.minecraft_version}-${config.FMP_version}:dev"
     compile "codechicken:NotEnoughItems:${config.minecraft_version}-${config.NEI_version}:dev"
     compile "codechicken:CodeChickenCore:${config.minecraft_version}-${config.CCC_version}:dev"
-    compile fileTree(dir: 'libs', include: '*.jar')
->>>>>>> Stashed changes
+    implementation name: 'RPCore-2.0.7'
 }
 
-def version_properties = ["version"       : mod_version, "mc_version": minecraft_version_range, "forge_version": forge_version_range,
-                          "loader_version": loader_version_range]
-def jsonPatterns = ["**/*.json", "**/*.mcmeta"]
-
-ext {
-    replaceResourcesInfo = [
-            "main"      : sourceSets.main,
-            "additions" : sourceSets.additions,
-            "generators": sourceSets.generators,
-            "defense"   : sourceSets.defense,
-            "tools"     : sourceSets.tools,
-    ]
-}
-
-replaceResourcesInfo.each { output, sourceSet ->
-    return tasks.create("${output}ReplaceResources", Copy) {
-        outputs.upToDateWhen { false }
-        def modsToml = copySpec {
-            from(sourceSet.resources) {
-                include "META-INF/mods.toml"
-                expand version_properties
-            }
-        }
-        //Copy it into the build dir
-        with modsToml
-        into "$buildDir/resources/${output}/"
-        //If IntelliJ's output dir exists, copy it there as well
-        if (new File("$rootDir/out/production/Mekanism.${output}/").exists()) {
-            //Note: This copies it into the correct place, but it still doesn't have the IntelliJ
-            // run work by default because of incorrect MOD_CLASSES getting generated.
-            // probably related to us setting inheritOutputDirs
-            copy {
-                with modsToml
-                into "$rootDir/out/production/Mekanism.${output}/"
-            }
-        }
-        //Note: If eclipse has its own non gradle based runClient as well and has issues due to
-        // the missing mods.toml file, add a check for its path and copy into the correct spot here
-    }
-}
-
-group = "mekanism"
-version = "${minecraft_version}-${mod_version}." + (System.env.BUILD_NUMBER ?: "homebaked")
-archivesBaseName = "Mekanism"
-sourceCompatibility = targetCompatibility = JavaVersion.VERSION_1_8
+version = "${config.minecraft_version}-${config.mod_version}." + (System.env.BUILD_NUMBER ?: "terralization")
+archivesBaseName = "MekanismAll"
+libsDirName = "../output"
+distsDirName = "../output"
+sourceCompatibility = '1.7'
+targetCompatibility = '1.7'
 
 minecraft {
-    mappings channel: "snapshot", version: "${mappings_version}"
+    version = config.minecraft_version + "-" + config.forge_version
+}
 
-    accessTransformers(file('src/main/resources/META-INF/accesstransformer.cfg'),
-            file('src/additions/resources/META-INF/accesstransformer.cfg'),
-            file('src/tools/resources/META-INF/accesstransformer.cfg'))
-
-    runs {
-        client {
-            workingDirectory file("run")
-
-            //The below if statements are to add args to your gradle.properties file in user home
-            // (DO NOT add them directly to the gradle.properties file for this project)
-            // Setting the below properties allows use of your normal Minecraft account in the
-            // dev environment including having your skin load. Each property also has a comment
-            // explaining what information to set the value to/format it expects
-            // One thing to note is because of the caching that goes on, after changing these
-            // variables, you need to refresh the project and rerun genIntellijRuns/genEclipseRuns
-            if (project.hasProperty('mc_uuid')) {
-                //Your uuid without any dashes in the middle
-                args '--uuid', project.getProperty('mc_uuid')
-            }
-            if (project.hasProperty('mc_username')) {
-                //Your username/display name, this is the name that shows up in chat
-                // Note: This is not your email, even if you have a Mojang account
-                args '--username', project.getProperty('mc_username')
-            }
-            if (project.hasProperty('mc_accessToken')) {
-                //Your access token, you can find it in your '.minecraft/launcher_profiles.json' file
-                args '--accessToken', project.getProperty('mc_accessToken')
-            }
-            if (project.hasProperty('forge_force_ansi')) {
-                //Force ansi if declared as a gradle variable, as the auto detection doesn't detect IntelliJ properly
-                // or eclipse's plugin that adds support for ansi escape in console
-                jvmArg('-Dterminal.ansi=' + project.getProperty('forge_force_ansi'))
-            }
-
-            mods {
-                mekanism.sources((SourceSet[]) [sourceSets.main, sourceSets.api])
-                mekanismadditions.source((SourceSet) sourceSets.additions)
-                mekanismdefense.source((SourceSet) sourceSets.defense)
-                mekanismgenerators.source((SourceSet) sourceSets.generators)
-                mekanismtools.source((SourceSet) sourceSets.tools)
-            }
-        }
-
-        server {
-            workingDirectory file("run")
-            if (project.hasProperty('forge_force_ansi')) {
-                //Force ansi if declared as a gradle variable, as the auto detection doesn't detect IntelliJ properly
-                // or eclipse's plugin that adds support for ansi escape in console
-                jvmArg('-Dterminal.ansi=' + project.getProperty('forge_force_ansi'))
-            }
-
-            mods {
-                mekanism.sources((SourceSet[]) [sourceSets.main, sourceSets.api])
-                mekanismadditions.source((SourceSet) sourceSets.additions)
-                mekanismdefense.source((SourceSet) sourceSets.defense)
-                mekanismgenerators.source((SourceSet) sourceSets.generators)
-                mekanismtools.source((SourceSet) sourceSets.tools)
-            }
-        }
-
-        data {
-            workingDirectory file("run")
-            environment 'target', 'fmluserdevdata'
-            //This fixes Mixin application problems from other mods because their refMaps are SRG-based,
-            // but we're in a MCP env
-            property "mixin.env.disableRefMap", "true"
-            if (project.hasProperty('forge_force_ansi')) {
-                //Force ansi if declared as a gradle variable, as the auto detection doesn't detect IntelliJ properly
-                // or eclipse's plugin that adds support for ansi escape in console
-                jvmArg('-Dterminal.ansi=' + project.getProperty('forge_force_ansi'))
-            }
-
-            args '--all', '--output', file('src/datagen/generated/'),
-                    '--mod', 'mekanism',
-                    '--existing', file('src/main/resources/'),
-                    '--mod', 'mekanismadditions',
-                    '--existing', file('src/additions/resources/'),
-                    '--mod', 'mekanismdefense',
-                    '--existing', file('src/defense/resources/'),
-                    '--mod', 'mekanismgenerators',
-                    '--existing', file('src/generators/resources/'),
-                    '--mod', 'mekanismtools',
-                    '--existing', file('src/tools/resources/')
-
-            mods {
-                mekanism.sources((SourceSet[]) [sourceSets.main, sourceSets.api, sourceSets.datagenmain])
-                mekanismadditions.sources((SourceSet[]) [sourceSets.additions, sourceSets.datagenadditions])
-                mekanismdefense.sources((SourceSet[]) [sourceSets.defense, sourceSets.datagendefense])
-                mekanismgenerators.sources((SourceSet[]) [sourceSets.generators, sourceSets.datagengenerators])
-                mekanismtools.sources((SourceSet[]) [sourceSets.tools, sourceSets.datagentools])
-            }
-        }
+processResources
+{
+    // copy everything else, thats not the mcmod.info
+    from(sourceSets.main.resources.srcDirs) {
+        exclude 'mcmod.info'
+        exclude '**/*.blend*'
     }
 }
 
-repositories {
-    maven {
-        name 'ForgeFS'
-        url 'https://files.minecraftforge.net/maven'
-        content {
-            includeGroupByRegex 'net\\.minecraftforge.*'
-            includeGroup 'de.oceanlabs.mcp'
-            includeGroup 'cpw.mods'
-        }
+task coreJar(type: Jar) {
+    baseName = 'Mekanism'
+
+    manifest {
+        attributes 'FMLCorePlugin': 'mekanism.common.asm.LoadingHook'
+        attributes 'FMLCorePluginContainsFMLMod': 'true'
     }
-    maven {
-        name 'prog'
-        url 'https://dvs1.progwml6.com/files/maven'
-        content {
-            includeGroup 'mezz.jei'
-        }
+
+    from('etc/core') {
+        include '*.info'
+        expand 'version': config.mod_version, 'mc_version': config.minecraft_version, 'fmp_version': config.FMP_version
     }
-    maven {
-        name 'tterrag'
-        url 'https://maven.tterrag.com/'
-        content {
-            includeGroupByRegex 'com\\.enderio.*'
-            includeGroupByRegex 'com\\.enderzoo.*'
-            includeGroupByRegex 'com\\.tterrag.*'
-            includeGroupByRegex 'tterrag.*'
-            includeGroup 'mcjty.theoneprobe'
-            includeGroup 'team.chisel.ctm'
-        }
-    }
-    maven {
-        name 'CurseMaven'
-        url 'https://www.cursemaven.com'
-        content {
-            includeGroup 'curse.maven'
-        }
-    }
-    maven {
-        name 'Modmaven'
-        url 'https://modmaven.dev/'
-        content {
-            includeGroup 'appeng'
-        }
-    }
-    maven {
-        name 'HWYLA'
-        url "https://maven.tehnut.info"
-        content {
-            includeGroup 'mcp.mobius.waila'
-        }
+
+    from zipTree(jar.outputs.getFiles().getSingleFile()).matching {
+        exclude 'mekanism/tools/**', 'mekanism/generators/**', 'mcmod.info'
     }
 }
 
-test {
-    useJUnitPlatform()
-}
-
-dependencies {
-    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
-
-    testImplementation "org.junit.jupiter:junit-jupiter-api:${junit_version}"
-    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${junit_version}"
-    //We use https://github.com/quicktheories/QuickTheories to allow for implementing property based testing
-    testImplementation "org.quicktheories:quicktheories:${quicktheories_version}"
-
-    compileOnly "org.jetbrains:annotations:${jb_annotations}"
-
-    compileOnly fg.deobf("mezz.jei:jei-${minecraft_version}:${jei_version}:api")
-    runtimeOnly fg.deobf("mezz.jei:jei-${minecraft_version}:${jei_version}")
-
-    runtimeOnly fg.deobf("team.chisel.ctm:CTM:MC1.16.1-${ctm_version}")
-
-    compileOnly fg.deobf("mcjty.theoneprobe:TheOneProbe-1.16:${top_version}:api")
-    runtimeOnly fg.deobf("mcjty.theoneprobe:TheOneProbe-1.16:${top_version}")
-
-    compileOnly fg.deobf("mcp.mobius.waila:Hwyla:${hwyla_version}:api")
-    runtimeOnly fg.deobf("mcp.mobius.waila:Hwyla:${hwyla_version}")
-
-    //Mods we have dependencies on but don't bother loading into the dev environment
-    //compileOnly fg.deobf("curse.maven:projecte-226410:${projecte_api_id}")
-    compileOnly fg.deobf("curse.maven:flux-networks-248020:${flux_networks_id}")
-
-    //Dependencies for data generators for mod compat reference
-    datagenmainImplementation fg.deobf("appeng:appliedenergistics2:${ae2_version}")
-    datagenmainCompileOnly fg.deobf("curse.maven:biomes-o-plenty-api-220318:${biomesoplenty_api_id}")
-    datagenmainRuntimeOnly fg.deobf("curse.maven:biomes-o-plenty-220318:${biomesoplenty_id}")
-    datagenmainImplementation fg.deobf("curse.maven:i-like-wood-324164:${ilikewood_id}")
-}
-
-processResources {
-    //Exclude the mods.toml file as we manually handle that and don't want it to invalidate our cache
-    exclude 'META-INF/mods.toml'
-    //Add our logo file
-    from("${projectDir}") { include 'logo.png' }
-    finalizedBy mainReplaceResources
-    //Minify json resources
-    doLast {
-        fileTree(dir: getOutputs().getFiles().getAsPath(), includes: jsonPatterns).each {
-            File file -> file.setText(JsonOutput.toJson(new JsonSlurper().parse(file)))
-        }
+task alltJar(type: Jar) {
+    baseName = 'MekanismALLT'
+    manifest {
+        attributes 'FMLCorePlugin': 'mekanism.common.asm.LoadingHook'
+        attributes 'FMLCorePluginContainsFMLMod': 'true'
     }
-}
-
-processAdditionsResources {
-    //Exclude the mods.toml file as we manually handle that and don't want it to invalidate our cache
-    exclude 'META-INF/mods.toml'
-    //Add our logo file
-    from("${projectDir}") { include 'logo.png' }
-    finalizedBy additionsReplaceResources
-    //Minify json resources
-    doLast {
-        fileTree(dir: getOutputs().getFiles().getAsPath(), includes: jsonPatterns).each {
-            File file -> file.setText(JsonOutput.toJson(new JsonSlurper().parse(file)))
-        }
+    from('etc/core') {
+        include '*.info'
+        expand 'version': config.mod_version, 'mc_version': config.minecraft_version, 'fmp_version': config.FMP_version
     }
-}
-
-processDefenseResources {
-    //Exclude the mods.toml file as we manually handle that and don't want it to invalidate our cache
-    exclude 'META-INF/mods.toml'
-    //Add our logo file
-    from("${projectDir}") { include 'logo.png' }
-    finalizedBy defenseReplaceResources
-    //Minify json resources
-    doLast {
-        fileTree(dir: getOutputs().getFiles().getAsPath(), includes: jsonPatterns).each {
-            File file -> file.setText(JsonOutput.toJson(new JsonSlurper().parse(file)))
-        }
+    from zipTree(jar.outputs.getFiles().getSingleFile()).matching {
+        exclude 'mcmod.info'
     }
-}
-
-processGeneratorsResources {
-    //Exclude the mods.toml file as we manually handle that and don't want it to invalidate our cache
-    exclude 'META-INF/mods.toml'
-    //Add our logo file
-    from("${projectDir}") { include 'logo.png' }
-    finalizedBy generatorsReplaceResources
-    //Minify json resources
-    doLast {
-        fileTree(dir: getOutputs().getFiles().getAsPath(), includes: jsonPatterns).each {
-            File file -> file.setText(JsonOutput.toJson(new JsonSlurper().parse(file)))
-        }
-    }
-}
-
-processToolsResources {
-    //Exclude the mods.toml file as we manually handle that and don't want it to invalidate our cache
-    exclude 'META-INF/mods.toml'
-    //Add our logo file
-    from("${projectDir}") { include 'logo.png' }
-    finalizedBy toolsReplaceResources
-    //Minify json resources
-    doLast {
-        fileTree(dir: getOutputs().getFiles().getAsPath(), includes: jsonPatterns).each {
-            File file -> file.setText(JsonOutput.toJson(new JsonSlurper().parse(file)))
-        }
-    }
-}
-
-def getManifestAttributes(String title) {
-    //TODO: Eventually we may want to try and improve the information supplied here
-    // if there are parts of it that are not as they are supposed to be
-    return [
-            "Specification-Title"     : title,
-            "Specification-Vendor"    : "Mekanism",
-            "Specification-Version"   : "${project.mod_version}",
-            "Implementation-Title"    : title,
-            "Implementation-Version"  : "${project.mod_version}",
-            "Implementation-Vendor"   : "Mekanism",
-            "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
-    ]
-}
-
-jar {
-    from sourceSets.api.output
-    from sourceSets.main.output
-    manifest.attributes(getManifestAttributes("Mekanism"))
-}
-
-//TODO: Sources Jars?
-
-task apiJar(type: Jar) {
-    archiveClassifier.set("api")
-    from sourceSets.api.output
-}
-
-task additionsJar(type: Jar) {
-    //Mark that it shouldn't run before the replace resources gets run
-    shouldRunAfter(additionsReplaceResources)
-    archiveFileName.set("MekanismAdditions-${project.version}.jar")
-    archiveClassifier.set("additions")
-    from sourceSets.additions.output
-    manifest.attributes(getManifestAttributes("MekanismAdditions"))
-    afterEvaluate { finalizedBy reobfAdditionsJar }
-}
-
-task defenseJar(type: Jar) {
-    //Mark that it shouldn't run before the replace resources gets run
-    shouldRunAfter(defenseReplaceResources)
-    archiveFileName.set("MekanismDefense-${project.version}.jar")
-    archiveClassifier.set("defense")
-    from sourceSets.defense.output
-    manifest.attributes(getManifestAttributes("MekanismDefense"))
-    afterEvaluate { finalizedBy reobfDefenseJar }
-}
-
-task generatorsJar(type: Jar) {
-    //Mark that it shouldn't run before the replace resources gets run
-    shouldRunAfter(generatorsReplaceResources)
-    archiveFileName.set("MekanismGenerators-${project.version}.jar")
-    archiveClassifier.set("generators")
-    from sourceSets.generators.output
-    manifest.attributes(getManifestAttributes("MekanismGenerators"))
-    afterEvaluate { finalizedBy reobfGeneratorsJar }
 }
 
 task toolsJar(type: Jar) {
-    //Mark that it shouldn't run before the replace resources gets run
-    shouldRunAfter(toolsReplaceResources)
-    archiveFileName.set("MekanismTools-${project.version}.jar")
-    archiveClassifier.set("tools")
-    from sourceSets.tools.output
-    manifest.attributes(getManifestAttributes("MekanismTools"))
-    afterEvaluate { finalizedBy reobfToolsJar }
+    baseName = 'MekanismTools'
+
+    from('etc/tools') {
+        include '*.info'
+        expand 'version':config.mod_version,'mc_version':config.minecraft_version,'fmp_version':config.FMP_version
+    }
+
+    from zipTree(jar.outputs.getFiles().getSingleFile()).matching {
+        include 'mekanism/tools/**'
+    }
 }
 
-task allJar(type: Jar) {
-    //Make sure the other tasks run first
-    shouldRunAfter(apiJar, jar, additionsJar, defenseJar, generatorsJar, toolsJar,
-            processResources, processAdditionsResources, processDefenseResources,
-            processGeneratorsResources, processToolsResources)
-    afterEvaluate { finalizedBy reobfAllJar }
-    archiveClassifier.set("all")
-    manifest.attributes(getManifestAttributes("MekanismAll"))
-    //Start by generating the merged data
-    doFirst(MergeJars.merge(project, sourceSets.main, sourceSets.additions, sourceSets.defense, sourceSets.generators, sourceSets.tools))
-    //Then copy all the files except for ones we are going to include from the merged
-    from(sourceSets.api.output)
-    from(sourceSets.main.output, MergeJars.excludedMain())
-    Closure excluded = MergeJars.excludedGeneral()
-    from(sourceSets.additions.output, excluded)
-    from(sourceSets.defense.output, excluded)
-    from(sourceSets.generators.output, excluded)
-    from(sourceSets.tools.output, excluded)
-    //And finally copy over the generated files
-    MergeJars.getGeneratedClosures(version_properties).each { closure -> from("$buildDir/generated", closure) }
+task generatorsJar(type: Jar) {
+    baseName = 'MekanismGenerators'
+
+    from('etc/generators') {
+        include '*.info'
+        expand 'version':config.mod_version,'mc_version':config.minecraft_version,'fmp_version':config.FMP_version
+    }
+
+    from zipTree(jar.outputs.getFiles().getSingleFile()).matching {
+        include 'mekanism/generators/**'
+    }
 }
 
-artifacts {
-    archives apiJar
-    archives jar
-    archives additionsJar
-    archives generatorsJar
-    archives defenseJar
-    archives toolsJar
-    archives allJar
+coreJar.dependsOn('reobf')
+toolsJar.dependsOn('reobf')
+generatorsJar.dependsOn('reobf')
+alltJar.dependsOn('reobf')
+
+
+task MDKZip(type: Zip) {
+    baseName = 'MDK'
+    from sourceSets.main.java.srcDirs
+    include 'mekanism/api/**'
 }
 
-reobf {
-    apiJar { classpath = sourceSets.api.compileClasspath }
-    jar { classpath = sourceSets.main.compileClasspath }
-    additionsJar { classpath = sourceSets.additions.compileClasspath }
-    generatorsJar { classpath = sourceSets.generators.compileClasspath }
-    defenseJar { classpath = sourceSets.defense.compileClasspath }
-    toolsJar { classpath = sourceSets.tools.compileClasspath }
-    allJar {}
+task releaseJars(type: Copy) {
+    from coreJar
+    from toolsJar
+    from generatorsJar
+    from MDKZip
+    from alltJar
+    rename '-(.*)jar', '.jar'
+    rename '-(.*)zip', '.zip'
+    into '.'
 }
+
 
 task fullBuild(type: Delete) {
     delete jar
-    dependsOn "build"
 }
 
-//Minimize/optimize all png files, requires optipng on the PATH
-// Credits: BrainStone
-void minimizePNGFile(File file) {
-    long size = file.length()
-    exec {
-        executable "optipng"
-        args "-q", "-o7", "-zm1-9", "-strip", "all", file
-    }
-    long newSize = file.length()
-    if (newSize < size) {
-        System.out.format("Reduced File size of %s from %d bytes to %d bytes (reduced by %.2f%%)\n",
-                file, size, newSize, ((double) (size - newSize)) / ((double) size) * 100.0)
-    }
-}
+fullBuild.dependsOn('releaseJars')
 
-task optimizePng {
-    def pngPatterns = ["**/*.png"]
-    doLast {
-        //Ensure the logo is minimized (we add this file to each jar)
-        minimizePNGFile(file("${projectDir}/logo.png"))
-        //Minimize any PNGs in the source sets
-        def sourceSets = [sourceSets.main, sourceSets.additions, sourceSets.generators, sourceSets.defense, sourceSets.tools]
-        for (def sourceSet : sourceSets) {
-            for (dir in sourceSet.resources.srcDirs) {
-                fileTree(dir: dir, includes: pngPatterns).each { minimizePNGFile(it) }
-            }
-        }
-    }
-}
-
-//properties to put in $HOME/.gradle/gradle.properties
-def MAVEN_PASSWORD_PROPERTY_NAME = 'mekanismMavenPassword'
-
-publishing {
-    publications {
-        maven(MavenPublication) {
-            from components.java
-            groupId = project.group
-            version = project.version
-            artifactId = project.archivesBaseName
-            artifacts = [apiJar, jar, generatorsJar, additionsJar, toolsJar, allJar]
-            pom {
-                groupId = project.group
-                version = project.version
-                if (System.getenv("MAVEN_ARTIFACT") != null) {
-                    artifactId = System.getenv("MAVEN_ARTIFACT")
-                } else {
-                    artifactId = project.archivesBaseName
-                }
-                name = "Mekanism"
-                packaging 'jar'
-                description 'Mekanism is a Minecraft add-on featuring high-tech machinery that can be used to create powerful tools, armor, and weapons.'
-                url = 'http://aidancbrady.com/mekanism/'
-                scm {
-                    url = 'https://github.com/mekanism/Mekanism.git'
-                }
-                issueManagement {
-                    system = 'github'
-                    url = 'https://github.com/mekanism/Mekanism/issues'
-                }
-                licenses {
-                    license {
-                        name = 'MIT'
-                        distribution = 'repo'
-                    }
-                }
-                withXml {
-                    NodeList dependencies = asNode().dependencies
-                    NodeList allDeps = dependencies.'*'
-
-                    // Remove forge deps
-                    allDeps.findAll() { Node el ->
-                        el.artifactId.text() == 'forge' && el.groupId.text() == 'net.minecraftforge'
-                    }.forEach() { Node el ->
-                        el.parent().remove(el)
-                    }
-                    //remove ForgeGradle's mapped suffix from versions & set as optional so anyone else doesn't inherit them
-                    allDeps.findAll() { Node el ->
-                        el.version.text().contains('_mapped_')
-                    }.each { Node el ->
-                        NodeList version = el.version
-                        version.each {
-                            it.setValue(it.text().substring(0, it.text().indexOf('_mapped_')))
-                        }
-                        el.appendNode('optional', true)
-                    }
-                }
-            }
-        }
-    }
-    repositories {
-        maven {
-            url = 'https://modmaven.dev/artifactory/local-releases/'
-            if (project.findProperty(MAVEN_PASSWORD_PROPERTY_NAME) != null) {
-                credentials {
-                    username = "mekanism"
-                    password = project.findProperty(MAVEN_PASSWORD_PROPERTY_NAME)
-                }
-            }
-        }
-    }
-}
-
-tasks.curseforge.dependsOn jar, additionsJar, generatorsJar, defenseJar, toolsJar, apiJar
-
-if (System.getenv("CURSEFORGE_KEY") != null || project.hasProperty('curseforgeKey')) {
-    println "Enabling Curseforge config"
-    curseforge {
-        apiKey = System.getenv("CURSEFORGE_KEY") ?: project.findProperty("curseforgeKey")
-
-        def resolvedChangelog = null
-
-        //closure to generate the changelog once, and only when needed by CurseGradle
-        def changeLogResolver = { ->
-            if (resolvedChangelog != null) {
-                return resolvedChangelog
-            }
-            def generatedChangelog = "Unable to generate changelog :("
-            def currentCommit = System.getenv("GIT_COMMIT")
-            def prevCommit = System.getenv("GIT_PREVIOUS_SUCCESSFUL_COMMIT") ?: System.getenv("GIT_PREVIOUS_COMMIT")
-
-            if (currentCommit != null && prevCommit != null) {
-                generatedChangelog = ""
-                grgit.log {
-                    range(prevCommit, currentCommit)
-                }.reverse().each { commit ->
-                    String message = commit.shortMessage
-                    if (!message.startsWith("Merge branch") && !message.startsWith("Merge pull request")) {
-//Ignore PRs and Merges
-                        message = message.replaceAll("#(\\d+)", { match ->//turn issues/prs into links (github currently supports prs being linked as issues)
-                            return "<a href=\"https://github.com/mekanism/Mekanism/issues/${match[1]}\">${match[0]}</a>"
-                        })
-                        if (generatedChangelog != "") {
-                            generatedChangelog += "<br>"
-                        }
-                        generatedChangelog += "<a href=\"https://github.com/mekanism/Mekanism/commit/${commit.id}\">${commit.getAbbreviatedId()}</a> - ${message}\n"
-                    }
-                }
-                println "Changelog generated"
-            }
-
-            def releaseNotesFile = project.file("docs/release_${mod_version}.html")
-            if (releaseNotesFile.exists()) {
-                //Add any version specific changelog stuff
-                def releaseNotes = releaseNotesFile.getText()
-                generatedChangelog = "$releaseNotes<br> $generatedChangelog"
-            }
-
-            if (curse_release_type == "alpha") {
-                //Add a warning at the top about what an alpha build means
-                generatedChangelog = "Warning: Mekanism is currently in alpha, and is not recommended for widespread use in modpacks. There are likely to be game breaking bugs, " +
-                        "and updating from one alpha to the next may cause various mekanism blocks to disappear/void their contents. While we will try to not have this happen/keep " +
-                        "it to a minimum make sure to make backups. You can read more about the alpha state of this project <a href=\"https://github.com/mekanism/Mekanism#alpha-status\">here</a>." +
-                        "<br> $generatedChangelog"
-            }
-            resolvedChangelog = generatedChangelog
-            return generatedChangelog
-        }
-
-        //Main
-        project {
-            id = '268560'
-            changelogType = "html"
-            changelog = changeLogResolver
-            // A file can also be set using: changelog = file('changelog.txt')
-            releaseType = "${curse_release_type}"
-            mainArtifact(jar) {
-                relations {
-                    optionalDependency "jei"
-                    optionalDependency "ctm"
-                    optionalDependency "biomes-o-plenty"
-                    optionalDependency "flux-networks"
-                    optionalDependency "hwyla"
-                    optionalDependency "i-like-wood"
-                    //optionalDependency "projecte"
-                    optionalDependency "the-one-probe"
-                }
-            }
-            addArtifact apiJar
-            addGameVersion "${minecraft_version}"
-        }
-
-        //Additions
-        project {
-            id = '345425'
-            changelogType = "html"
-            changelog = changeLogResolver
-            releaseType = "${curse_release_type}"
-            mainArtifact(additionsJar) {
-                relations {
-                    requiredDependency "mekanism"
-                }
-            }
-            addGameVersion "${minecraft_version}"
-        }
-
-        //Defense
-        /*project {
-            id = '376939'
-            changelogType = "html"
-            changelog = changeLogResolver
-            releaseType = "${curse_release_type}"
-            mainArtifact(defenseJar) {
-                relations {
-                    requiredDependency "mekanism"
-                }
-            }
-            addGameVersion "${minecraft_version}"
-        }*/
-
-        //Generators
-        project {
-            id = '268566'
-            changelogType = "html"
-            changelog = changeLogResolver
-            releaseType = "${curse_release_type}"
-            mainArtifact(generatorsJar) {
-                relations {
-                    requiredDependency "mekanism"
-                }
-            }
-            addGameVersion "${minecraft_version}"
-        }
-
-        //Tools
-        project {
-            id = '268567'
-            changelogType = "html"
-            changelog = changeLogResolver
-            releaseType = "${curse_release_type}"
-            mainArtifact(toolsJar) {
-                relations {
-                    requiredDependency "mekanism"
-                }
-            }
-            addGameVersion "${minecraft_version}"
-        }
-    }
-}
